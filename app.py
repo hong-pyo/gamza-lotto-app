@@ -62,25 +62,43 @@ if not st.session_state.is_logged_in:
             user_info = kakao_login(auth_code)
 
             if user_info:
-                # 사용자 정보 가져오기
-                kakao_id = user_info['kakao_id']
-                nickname = user_info['nickname']
+                # DB에서 사용자 조회 또는 생성
+                session = SessionLocal()
+                try:
+                    user = session.query(User).filter_by(kakao_id=user_info['kakao_id']).first()
 
-                # DB에 사용자 저장 또는 조회
-                user = get_or_create_user(session, kakao_id, nickname)
+                    if not user:
+                        # 첫 로그인: 새 사용자 생성
+                        user = User(
+                            kakao_id=user_info['kakao_id'],
+                            nickname=user_info['nickname']
+                        )
+                        session.add(user)
+                        session.commit()
 
-                # 세션에 저장
-                st.session_state.is_logged_in = True
-                st.session_state.user_id = user.id
-                st.session_state.kakao_id = user.kakao_id
-                st.session_state.nickname = user.nickname
+                    # 세션에 사용자 정보 저장
+                    st.session_state.is_logged_in = True
+                    st.session_state.user_id = user.id
+                    st.session_state.kakao_id = user.kakao_id
+                    st.session_state.nickname = user.nickname
 
-                # URL 파라미터 제거하고 리다이렉트
+                    # 🚨 쿼리 파라미터 제거 후 리다이렉트
+                    st.query_params.clear()
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"사용자 정보 저장 중 오류: {e}")
+                    session.rollback()
+                    st.query_params.clear()
+                    st.rerun()
+                finally:
+                    session.close()
+            else:
+                st.error("로그인에 실패했습니다. 다시 시도해주세요.")
                 st.query_params.clear()
                 st.rerun()
-            else:
-                st.error("❌ 로그인에 실패했습니다. 다시 시도해주세요.")
-                st.query_params.clear()
+
+        st.stop()
 
 
 # ===== 로그인 페이지 =====
