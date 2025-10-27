@@ -58,10 +58,7 @@ if not st.session_state.is_logged_in:
     if 'login_processed' not in st.session_state:
         st.session_state.login_processed = False
 
-    if 'code' in query_params and not st.session_state.login_processed:
-        # 중복 처리 방지
-        st.session_state.login_processed = True
-
+    if 'code' in query_params and not st.session_state.is_logged_in:
         auth_code = query_params['code']
 
         with st.spinner("로그인 중..."):
@@ -72,16 +69,8 @@ if not st.session_state.is_logged_in:
                 # DB에서 사용자 조회 또는 생성
                 session = SessionLocal()
                 try:
-                    user = session.query(User).filter_by(kakao_id=user_info['kakao_id']).first()
-
-                    if not user:
-                        # 첫 로그인: 새 사용자 생성
-                        user = User(
-                            kakao_id=user_info['kakao_id'],
-                            nickname=user_info['nickname']
-                        )
-                        session.add(user)
-                        session.commit()
+                    # get_or_create_user 함수 사용
+                    user = get_or_create_user(session, user_info['kakao_id'], user_info['nickname'])
 
                     # 세션에 사용자 정보 저장
                     st.session_state.is_logged_in = True
@@ -91,25 +80,22 @@ if not st.session_state.is_logged_in:
 
                     session.close()
 
-                    # JavaScript로 리다이렉트
-                    st.markdown("""
-                        <script>
-                        window.location.href = window.location.origin + window.location.pathname;
-                        </script>
-                    """, unsafe_allow_html=True)
+                    # 성공 메시지
                     st.success("로그인 성공!")
-                    st.stop()
+
+                    # 쿼리 파라미터 제거 후 리다이렉트
+                    st.query_params.clear()
+                    st.rerun()
 
                 except Exception as e:
-                    st.error(f"오류: {e}")
+                    st.error(f"로그인 처리 중 오류: {e}")
                     session.rollback()
                     session.close()
-                    st.session_state.login_processed = False
             else:
-                st.error("로그인 실패")
-                st.session_state.login_processed = False
-
-        st.stop()
+                st.error("로그인에 실패했습니다. 다시 시도해주세요.")
+                # 쿼리 파라미터 제거
+                st.query_params.clear()
+                st.rerun()
 
 
 # ===== 로그인 페이지 =====
