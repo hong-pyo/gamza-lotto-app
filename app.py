@@ -5,7 +5,7 @@ import streamlit as st
 from datetime import datetime
 import json
 
-from database import init_db, get_session, RecommendedNumber, PurchasedNumber, DrawResult, get_or_create_user
+from database import SessionLocal, init_db, get_session, RecommendedNumber, PurchasedNumber, DrawResult, get_or_create_user
 from utils import (
     generate_lotto_numbers,
     parse_qr_url,
