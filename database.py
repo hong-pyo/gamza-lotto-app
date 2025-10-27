@@ -21,9 +21,9 @@ class User(Base):
     __tablename__ = 'users'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    kakao_id = Column(BigInteger, unique=True, nullable=False)  # 카카오 고유 ID (정수형)
-    nickname = Column(String(100), nullable=False)  # 닉네임
-    created_at = Column(DateTime, default=datetime.now, nullable=False)  # 가입일시
+    kakao_id = Column(BigInteger, unique=True, nullable=False)
+    nickname = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
 
     # 관계 설정
     recommended_numbers = relationship("RecommendedNumber", back_populates="user", cascade="all, delete-orphan")
@@ -35,22 +35,31 @@ class RecommendedNumber(Base):
     __tablename__ = 'recommended_numbers'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)  # 사용자 ID
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
-    draw_number = Column(Integer, nullable=True)  # 회차 (null 허용)
-    numbers = Column(Text, nullable=False)  # JSON 형태로 저장
+    draw_number = Column(Integer, nullable=True)
+    _numbers = Column('numbers', Text, nullable=False)  # 실제 DB 컬럼
     winning_status = Column(String(20), default="미확인", nullable=False)
 
     # 관계 설정
     user = relationship("User", back_populates="recommended_numbers")
 
-    def get_numbers_dict(self):
-        """JSON 문자열을 딕셔너리로 변환"""
-        return json.loads(self.numbers)
+    @property
+    def numbers(self):
+        """numbers를 자동으로 딕셔너리로 반환"""
+        if isinstance(self._numbers, str):
+            return json.loads(self._numbers)
+        return self._numbers
 
-    def set_numbers_dict(self, numbers_dict):
-        """딕셔너리를 JSON 문자열로 저장"""
-        self.numbers = json.dumps(numbers_dict, ensure_ascii=False)
+    @numbers.setter
+    def numbers(self, value):
+        """딕셔너리를 자동으로 JSON 문자열로 저장"""
+        if isinstance(value, dict):
+            self._numbers = json.dumps(value, ensure_ascii=False)
+        elif isinstance(value, str):
+            self._numbers = value
+        else:
+            self._numbers = json.dumps(value, ensure_ascii=False)
 
 
 class PurchasedNumber(Base):
@@ -58,22 +67,31 @@ class PurchasedNumber(Base):
     __tablename__ = 'purchased_numbers'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)  # 사용자 ID
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     purchased_at = Column(DateTime, default=datetime.now, nullable=False)
-    draw_number = Column(Integer, nullable=False)  # 회차
-    numbers = Column(Text, nullable=False)  # JSON 형태로 저장
+    draw_number = Column(Integer, nullable=False)
+    _numbers = Column('numbers', Text, nullable=False)  # 실제 DB 컬럼
     winning_status = Column(String(20), default="미확인", nullable=False)
 
     # 관계 설정
     user = relationship("User", back_populates="purchased_numbers")
 
-    def get_numbers_dict(self):
-        """JSON 문자열을 딕셔너리로 변환"""
-        return json.loads(self.numbers)
+    @property
+    def numbers(self):
+        """numbers를 자동으로 딕셔너리로 반환"""
+        if isinstance(self._numbers, str):
+            return json.loads(self._numbers)
+        return self._numbers
 
-    def set_numbers_dict(self, numbers_dict):
-        """딕셔너리를 JSON 문자열로 저장"""
-        self.numbers = json.dumps(numbers_dict, ensure_ascii=False)
+    @numbers.setter
+    def numbers(self, value):
+        """딕셔너리를 자동으로 JSON 문자열로 저장"""
+        if isinstance(value, dict):
+            self._numbers = json.dumps(value, ensure_ascii=False)
+        elif isinstance(value, str):
+            self._numbers = value
+        else:
+            self._numbers = json.dumps(value, ensure_ascii=False)
 
 
 class DrawResult(Base):
@@ -81,17 +99,26 @@ class DrawResult(Base):
     __tablename__ = 'draw_results'
 
     draw_number = Column(Integer, primary_key=True)
-    winning_numbers = Column(Text, nullable=False)  # JSON 배열
+    _winning_numbers = Column('winning_numbers', Text, nullable=False)  # 실제 DB 컬럼
     bonus_number = Column(Integer, nullable=False)
     fetched_at = Column(DateTime, default=datetime.now, nullable=False)
 
-    def get_winning_numbers(self):
-        """JSON 문자열을 리스트로 변환"""
-        return json.loads(self.winning_numbers)
+    @property
+    def winning_numbers(self):
+        """winning_numbers를 자동으로 리스트로 반환"""
+        if isinstance(self._winning_numbers, str):
+            return json.loads(self._winning_numbers)
+        return self._winning_numbers
 
-    def set_winning_numbers(self, numbers_list):
-        """리스트를 JSON 문자열로 저장"""
-        self.winning_numbers = json.dumps(numbers_list)
+    @winning_numbers.setter
+    def winning_numbers(self, value):
+        """리스트를 자동으로 JSON 문자열로 저장"""
+        if isinstance(value, list):
+            self._winning_numbers = json.dumps(value)
+        elif isinstance(value, str):
+            self._winning_numbers = value
+        else:
+            self._winning_numbers = json.dumps(value)
 
 
 def migrate_existing_data(session):
@@ -101,11 +128,11 @@ def migrate_existing_data(session):
     """
     try:
         # 기존 데이터가 있는지 확인
-        engine = session.bind
+        engine_db = session.bind
 
         # 테이블 존재 여부 확인
         from sqlalchemy import inspect
-        inspector = inspect(engine)
+        inspector = inspect(engine_db)
 
         if 'recommended_numbers' in inspector.get_table_names():
             # user_id 컬럼이 없는 기존 데이터 확인
@@ -117,8 +144,8 @@ def migrate_existing_data(session):
                     print("기존 데이터베이스 발견: 마이그레이션이 필요합니다.")
                     print("새로운 스키마로 데이터베이스를 재생성합니다.")
                     # 기존 테이블 삭제하고 새로 생성
-                    Base.metadata.drop_all(engine)
-                    Base.metadata.create_all(engine)
+                    Base.metadata.drop_all(engine_db)
+                    Base.metadata.create_all(engine_db)
                     print("마이그레이션 완료: 새로운 데이터베이스가 생성되었습니다.")
             except Exception as e:
                 print(f"마이그레이션 체크 중 오류: {e}")
