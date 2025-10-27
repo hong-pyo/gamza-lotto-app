@@ -14,6 +14,7 @@ Base = declarative_base()
 DATABASE_URL = "sqlite:///./lotto.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base.metadata.create_all(bind=engine)
 
 # 테이블 생성
 Base.metadata.create_all(bind=engine)
