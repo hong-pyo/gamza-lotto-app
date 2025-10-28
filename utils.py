@@ -8,24 +8,40 @@ from urllib.parse import urlparse, parse_qs
 import re
 
 
-def generate_lotto_numbers(count=1):
+def generate_lotto_numbers(exclude=None, count=1):
     """
     로또 번호 생성
 
     Args:
+        exclude: 제외할 번호 set 또는 list
         count: 생성할 조합 수 (1~5)
 
     Returns:
-        dict: {"A": [1,2,3,4,5,6], "B": [...], ...}
+        list: [1,2,3,4,5,6] (count=1일 때)
+        dict: {"A": [1,2,3,4,5,6], "B": [...], ...} (count>1일 때)
     """
-    combinations = {}
-    labels = ["A", "B", "C", "D", "E"]
+    # 사용 가능한 번호
+    if exclude:
+        available = [n for n in range(1, 46) if n not in exclude]
+    else:
+        available = list(range(1, 46))
 
-    for i in range(count):
-        numbers = sorted(random.sample(range(1, 46), 6))
-        combinations[labels[i]] = numbers
+    if len(available) < 6:
+        return [] if count == 1 else {}
 
-    return combinations
+    if count == 1:
+        # 단일 조합
+        return sorted(random.sample(available, 6))
+    else:
+        # 여러 조합
+        combinations = {}
+        labels = ["A", "B", "C", "D", "E"]
+
+        for i in range(count):
+            numbers = sorted(random.sample(available, 6))
+            combinations[labels[i]] = numbers
+
+        return combinations
 
 
 def parse_qr_url(url):
@@ -36,7 +52,7 @@ def parse_qr_url(url):
         url: QR 코드 URL
 
     Returns:
-        tuple: (회차, {"A": [4,9,13,18,24,33], ...}) 또는 (None, None)
+        dict: {'draw_number': 1234, 'numbers': [[1,2,3,4,5,6], ...]} 또는 None
     """
     try:
         # URL 파싱
@@ -45,14 +61,14 @@ def parse_qr_url(url):
 
         # v 파라미터에서 회차 추출
         if 'v' not in query_params:
-            return None, None
+            return None
 
         v_param = query_params['v'][0]
 
         # 회차 번호 추출 (숫자로 시작하는 부분)
         draw_match = re.match(r'^(\d+)', v_param)
         if not draw_match:
-            return None, None
+            return None
 
         draw_number = int(draw_match.group(1))
 
@@ -60,8 +76,7 @@ def parse_qr_url(url):
         remaining = v_param[len(str(draw_number)):]
         segments = remaining.split('s')[1:]  # 첫 번째는 빈 문자열
 
-        combinations = {}
-        labels = ["A", "B", "C", "D", "E"]
+        numbers_list = []
 
         for i, segment in enumerate(segments[:5]):  # 최대 5개 조합
             # 2자리씩 끊어서 파싱
@@ -74,13 +89,17 @@ def parse_qr_url(url):
 
             # 6개 숫자만 추출
             if len(numbers) >= 6:
-                combinations[labels[i]] = sorted(numbers[:6])
+                numbers_list.append(sorted(numbers[:6]))
 
-        return draw_number, combinations
+        # dict 형식으로 반환
+        return {
+            'draw_number': draw_number,
+            'numbers': numbers_list
+        }
 
     except Exception as e:
         print(f"QR URL 파싱 오류: {e}")
-        return None, None
+        return None
 
 
 def get_excluded_numbers(combinations):
@@ -134,7 +153,7 @@ def fetch_winning_numbers(draw_number):
         draw_number: 회차 번호
 
     Returns:
-        tuple: (당첨번호 리스트, 보너스 번호) 또는 (None, None)
+        dict: {'winning_numbers': [1,2,3,4,5,6], 'bonus_number': 7} 또는 None
     """
     try:
         url = "https://www.dhlottery.co.kr/gameResult.do?method=byWin"
@@ -161,13 +180,16 @@ def fetch_winning_numbers(draw_number):
             # 7번째는 보너스 번호
             bonus_number = int(balls[6].text.strip())
 
-            return winning_numbers, bonus_number
+            return {
+                'winning_numbers': winning_numbers,
+                'bonus_number': bonus_number
+            }
 
-        return None, None
+        return None
 
     except Exception as e:
         print(f"당첨번호 크롤링 오류: {e}")
-        return None, None
+        return None
 
 
 def check_winning(user_numbers, winning_numbers, bonus_number):
