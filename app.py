@@ -4,8 +4,10 @@
 import streamlit as st
 from datetime import datetime
 import json
+import os  # 🚨 이거 추가!
 
 from database import SessionLocal, User, init_db, get_session, RecommendedNumber, PurchasedNumber, DrawResult, get_or_create_user
+
 from utils import (
     generate_lotto_numbers,
     parse_qr_url,
