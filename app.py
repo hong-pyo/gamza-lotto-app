@@ -215,99 +215,293 @@ if menu == "🎲 번호 생성":
 
 
 # ===== 2. QR 입력 페이지 =====
+# ===== 2. QR 입력 =====
 elif menu == "📱 QR 입력":
-    st.title("📱 QR 코드 입력 및 분석")
-    st.markdown("동행복권 QR 코드 URL을 입력하여 구매한 번호를 분석합니다.")
+    st.header("📱 QR 코드 스캔")
 
-    # URL 입력
-    qr_url = st.text_input(
-        "QR 코드 URL 입력",
-        placeholder="https://m.dhlottery.co.kr/qr.do?method=winQr&v=...",
-        help="동행복권 QR 코드 URL을 입력하세요."
-    )
+    # 탭으로 구분
+    tab1, tab2 = st.tabs(["📷 카메라로 스캔", "⌨️ URL 직접 입력"])
 
-    if st.button("🔍 분석하기", type="primary", use_container_width=True):
-        if not qr_url:
-            st.warning("⚠️ URL을 입력해주세요.")
-        else:
-            draw_number, combinations = parse_qr_url(qr_url)
+    with tab1:
+        st.markdown("### 📷 카메라로 QR 코드 스캔")
+        st.info("🎯 QR 코드를 카메라에 비추면 자동으로 인식됩니다!")
 
-            if draw_number is None or not combinations:
-                st.error("❌ URL 파싱에 실패했습니다. URL을 확인해주세요.")
-            else:
-                st.success(f"✅ 분석 완료! (회차: {draw_number}회)")
+        # QR 스캐너 HTML/JavaScript
+        qr_scanner_html = """
+        <div style="max-width: 500px; margin: 0 auto;">
+            <div id="qr-reader" style="width: 100%; border-radius: 10px; overflow: hidden;"></div>
+            <div id="qr-result" style="margin-top: 20px; display: none;">
+                <div style="padding: 15px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 5px; color: #155724;">
+                    <strong>✅ QR 코드 인식 성공!</strong>
+                    <div id="qr-url" style="margin-top: 10px; word-break: break-all;"></div>
+                </div>
+            </div>
+            <div id="qr-error" style="margin-top: 20px; display: none;">
+                <div style="padding: 15px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 5px; color: #721c24;">
+                    <strong>❌ 카메라 접근 불가</strong>
+                    <div style="margin-top: 10px;">카메라 권한을 허용해주세요.</div>
+                </div>
+            </div>
+        </div>
 
-                # 분석 결과 표시
-                st.markdown("### 📋 분석 결과")
-                st.markdown(f"**회차:** {draw_number}회")
+        <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+        <script>
+        let html5QrCode = null;
+        let isScanning = false;
 
-                # 조합별 번호 표시
-                for label, numbers in combinations.items():
-                    st.markdown(f"**{label}조합:** {format_numbers_with_emoji(numbers)}")
+        function onScanSuccess(decodedText, decodedResult) {
+            if (!isScanning) return;
 
-                # 세션에 저장 (구매기록 저장용)
-                st.session_state.parsed_qr = {
-                    "draw_number": draw_number,
-                    "combinations": combinations
-                }
+            console.log(`QR Code detected: ${decodedText}`);
 
-                # 구매기록 저장 버튼
-                if st.button("💾 구매기록 저장", use_container_width=True):
-                    try:
-                        new_purchase = PurchasedNumber(
-                            user_id=st.session_state.user_id,  # 현재 로그인한 사용자
-                            purchased_at=datetime.now(),
-                            draw_number=draw_number,
-                            numbers=json.dumps(combinations, ensure_ascii=False),
-                            winning_status="미확인"
-                        )
-                        session.add(new_purchase)
-                        session.commit()
-                        st.success("✅ 구매기록이 저장되었습니다!")
-                    except Exception as e:
-                        session.rollback()
-                        st.error(f"❌ 저장 중 오류 발생: {e}")
+            // QR 코드 인식 성공 표시
+            document.getElementById('qr-result').style.display = 'block';
+            document.getElementById('qr-url').textContent = decodedText;
 
-                st.markdown("---")
+            // Streamlit에 데이터 전달
+            window.parent.postMessage({
+                type: 'streamlit:setComponentValue',
+                value: decodedText
+            }, '*');
 
-                # 제외된 번호 목록
-                excluded = get_excluded_numbers(combinations)
-                st.markdown("### 🚫 제외된 번호 목록")
-                st.markdown(" ".join([f"`{format_number(n)}`" for n in excluded]))
-                st.caption(f"총 {len(excluded)}개의 번호가 사용되었습니다.")
+            // 스캔 중지
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    isScanning = false;
+                    document.getElementById('qr-reader').innerHTML = '<div style="padding: 20px; text-align: center; color: #28a745;">✅ QR 코드 인식 완료!</div>';
+                }).catch(err => {
+                    console.log('Stop scanning error:', err);
+                });
+            }
+        }
 
-                st.markdown("---")
+        function onScanError(errorMessage) {
+            // 스캔 실패는 무시 (계속 시도)
+        }
 
-                # 추천 조합 생성
-                st.markdown("### 💡 추천 조합 (제외 번호 제외)")
-                recommended = generate_excluding_numbers(excluded, count=5)
+        // QR 스캐너 시작
+        function startScanner() {
+            html5QrCode = new Html5Qrcode("qr-reader");
+            isScanning = true;
 
-                if not recommended:
-                    st.warning("⚠️ 사용 가능한 번호가 부족하여 추천 조합을 생성할 수 없습니다.")
-                else:
-                    # 추천 조합 표시
-                    cols = st.columns(5)
-                    for idx, (label, numbers) in enumerate(recommended.items()):
-                        with cols[idx]:
-                            st.markdown(f"**{label}조합**")
-                            st.markdown(format_numbers_with_emoji(numbers))
+            const config = {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0
+            };
 
-                    # 추천 조합 저장 버튼
-                    if st.button("💾 추천번호 5개 모두 저장", use_container_width=True):
+            // 모바일: 후면 카메라 우선
+            html5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                onScanSuccess,
+                onScanError
+            ).catch(err => {
+                console.log('Camera start error:', err);
+                document.getElementById('qr-error').style.display = 'block';
+
+                // 후면 카메라 실패 시 전면 카메라 시도
+                html5QrCode.start(
+                    { facingMode: "user" },
+                    config,
+                    onScanSuccess,
+                    onScanError
+                ).catch(err2 => {
+                    console.log('Front camera also failed:', err2);
+                });
+            });
+        }
+
+        // 페이지 로드 시 자동 시작
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startScanner);
+        } else {
+            startScanner();
+        }
+        </script>
+        """
+
+        # HTML 컴포넌트로 렌더링
+        scanned_url = st.components.v1.html(qr_scanner_html, height=600)
+
+        # QR 코드가 인식되면 자동으로 분석
+        if scanned_url:
+            st.markdown("---")
+            st.markdown("### 📊 QR 분석 중...")
+
+            with st.spinner("분석 중..."):
+                result = parse_qr_url(scanned_url)
+
+                if result:
+                    draw_number = result['draw_number']
+                    numbers_list = result['numbers']
+
+                    st.success(f"✅ {draw_number}회차 QR 분석 완료!")
+
+                    st.markdown("### 📊 분석 결과")
+                    st.markdown(f"**회차:** {draw_number}회")
+
+                    st.markdown("**파싱된 번호:**")
+                    labels = ['A', 'B', 'C', 'D', 'E']
+                    for i, numbers in enumerate(numbers_list):
+                        if i < len(labels):
+                            st.markdown(f"{labels[i]}조합: {' '.join([f'{n:02d}' for n in numbers])}")
+
+                    # 구매기록 저장 버튼
+                    if st.button("💾 구매기록 저장", key="save_qr_scan"):
+                        session = SessionLocal()
                         try:
-                            new_recommendation = RecommendedNumber(
-                                user_id=st.session_state.user_id,  # 현재 로그인한 사용자
-                                created_at=datetime.now(),
-                                draw_number=None,
-                                numbers=json.dumps(recommended, ensure_ascii=False),
-                                winning_status="미확인"
+                            numbers_dict = {labels[i]: numbers_list[i] for i in range(len(numbers_list))}
+
+                            purchased = PurchasedNumber(
+                                user_id=st.session_state.user_id,
+                                draw_number=draw_number
                             )
-                            session.add(new_recommendation)
+                            purchased.numbers = numbers_dict
+
+                            session.add(purchased)
                             session.commit()
-                            st.success("✅ 추천번호 5개가 히스토리에 저장되었습니다!")
+
+                            st.success("✅ 구매기록이 저장되었습니다!")
                         except Exception as e:
+                            st.error(f"저장 실패: {e}")
                             session.rollback()
-                            st.error(f"❌ 저장 중 오류 발생: {e}")
+                        finally:
+                            session.close()
+
+                    # 제외 번호 추천
+                    st.markdown("---")
+                    st.markdown("### 🎲 이 번호들 제외하고 5개 조합 추천")
+
+                    # 모든 번호 추출 및 중복 제거
+                    all_numbers = set()
+                    for numbers in numbers_list:
+                        all_numbers.update(numbers)
+
+                    st.markdown(f"**제외된 번호:** {' '.join([f'{n:02d}' for n in sorted(all_numbers)])}")
+
+                    # 5개 조합 생성
+                    if st.button("🎲 제외 번호 기반 추천 생성", key="gen_excluding"):
+                        from utils import generate_lotto_numbers
+
+                        recommended_sets = []
+                        for i in range(5):
+                            numbers = generate_lotto_numbers(exclude=all_numbers)
+                            recommended_sets.append(numbers)
+                            st.markdown(f"**추천 {labels[i]}조합:** " + " ".join([f"⚪ {n:02d}" for n in numbers]))
+
+                        # 추천번호 저장 버튼
+                        if st.button("💾 추천번호 5개 모두 저장", key="save_recommended"):
+                            session = SessionLocal()
+                            try:
+                                numbers_dict = {labels[i]: recommended_sets[i] for i in range(5)}
+
+                                recommended = RecommendedNumber(
+                                    user_id=st.session_state.user_id
+                                )
+                                recommended.numbers = numbers_dict
+
+                                session.add(recommended)
+                                session.commit()
+
+                                st.success("✅ 추천번호가 히스토리에 저장되었습니다!")
+                            except Exception as e:
+                                st.error(f"저장 실패: {e}")
+                                session.rollback()
+                            finally:
+                                session.close()
+                else:
+                    st.error("❌ QR URL 형식이 올바르지 않습니다.")
+
+    with tab2:
+        st.markdown("### ⌨️ URL 직접 입력")
+
+        qr_url = st.text_input(
+            "QR URL을 입력하세요",
+            placeholder="https://m.dhlottery.co.kr/qr.do?method=winQr&v=..."
+        )
+
+        if st.button("🔍 분석하기") and qr_url:
+            with st.spinner("QR 분석 중..."):
+                result = parse_qr_url(qr_url)
+
+                if result:
+                    draw_number = result['draw_number']
+                    numbers_list = result['numbers']
+
+                    st.success(f"✅ {draw_number}회차 QR 분석 완료!")
+
+                    st.markdown("### 📊 분석 결과")
+                    st.markdown(f"**회차:** {draw_number}회")
+
+                    st.markdown("**파싱된 번호:**")
+                    labels = ['A', 'B', 'C', 'D', 'E']
+                    for i, numbers in enumerate(numbers_list):
+                        if i < len(labels):
+                            st.markdown(f"{labels[i]}조합: {' '.join([f'{n:02d}' for n in numbers])}")
+
+                    # 구매기록 저장 버튼
+                    if st.button("💾 구매기록 저장", key="save_manual"):
+                        session = SessionLocal()
+                        try:
+                            numbers_dict = {labels[i]: numbers_list[i] for i in range(len(numbers_list))}
+
+                            purchased = PurchasedNumber(
+                                user_id=st.session_state.user_id,
+                                draw_number=draw_number
+                            )
+                            purchased.numbers = numbers_dict
+
+                            session.add(purchased)
+                            session.commit()
+
+                            st.success("✅ 구매기록이 저장되었습니다!")
+                        except Exception as e:
+                            st.error(f"저장 실패: {e}")
+                            session.rollback()
+                        finally:
+                            session.close()
+
+                    # 제외 번호 추천 (위와 동일)
+                    st.markdown("---")
+                    st.markdown("### 🎲 이 번호들 제외하고 5개 조합 추천")
+
+                    all_numbers = set()
+                    for numbers in numbers_list:
+                        all_numbers.update(numbers)
+
+                    st.markdown(f"**제외된 번호:** {' '.join([f'{n:02d}' for n in sorted(all_numbers)])}")
+
+                    if st.button("🎲 제외 번호 기반 추천 생성", key="gen_excluding_manual"):
+                        from utils import generate_lotto_numbers
+
+                        recommended_sets = []
+                        for i in range(5):
+                            numbers = generate_lotto_numbers(exclude=all_numbers)
+                            recommended_sets.append(numbers)
+                            st.markdown(f"**추천 {labels[i]}조합:** " + " ".join([f"⚪ {n:02d}" for n in numbers]))
+
+                        if st.button("💾 추천번호 5개 모두 저장", key="save_recommended_manual"):
+                            session = SessionLocal()
+                            try:
+                                numbers_dict = {labels[i]: recommended_sets[i] for i in range(5)}
+
+                                recommended = RecommendedNumber(
+                                    user_id=st.session_state.user_id
+                                )
+                                recommended.numbers = numbers_dict
+
+                                session.add(recommended)
+                                session.commit()
+
+                                st.success("✅ 추천번호가 히스토리에 저장되었습니다!")
+                            except Exception as e:
+                                st.error(f"저장 실패: {e}")
+                                session.rollback()
+                            finally:
+                                session.close()
+                else:
+                    st.error("❌ QR URL 형식이 올바르지 않습니다.")
 
 
 # ===== 3. 구매 기록 페이지 =====
