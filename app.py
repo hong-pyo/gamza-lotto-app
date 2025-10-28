@@ -100,53 +100,81 @@ if not st.session_state.is_logged_in:
 
 # ===== 로그인 페이지 =====
 if not st.session_state.is_logged_in:
-    st.title("🎲 로또 번호 관리 앱")
+    st.title("🎰 로또 번호 관리")
     st.markdown("---")
 
+    # 로그인 안내
     st.markdown("""
-    ### 환영합니다!
+    ### 로그인이 필요합니다
 
-    로또 번호를 관리하고 당첨을 확인할 수 있는 앱입니다.
+    카카오톡 계정으로 로그인하여 나만의 로또 번호를 관리하세요!
 
-    **주요 기능:**
-    - 🎲 랜덤 번호 생성
-    - 📱 QR 코드 분석
-    - 📋 구매 기록 관리
-    - 📊 추천 히스토리
-    - 🎯 당첨 확인
-
-    로그인하여 시작하세요!
+    **기능:**
+    - 🎲 랜덤 번호 생성 및 저장
+    - 📱 QR 코드로 구매 기록 관리
+    - 🎯 자동 당첨 확인
+    - 📊 번호 추천 히스토리
     """)
 
     st.markdown("---")
 
-    # 카카오 로그인 버튼
-    col1, col2, col3 = st.columns([1, 2, 1])
+    # 카카오 JavaScript SDK 로그인
+    kakao_js_key = os.getenv("KAKAO_REST_API_KEY")  # JavaScript 키로 교체 필요
 
-    with col2:
-        kakao_login_url = get_kakao_login_url()
+    login_html = f"""
+    <div style="max-width: 400px; margin: 0 auto;">
+        <div id="kakao-login-container" style="text-align: center;"></div>
+        <div id="login-status" style="margin-top: 20px;"></div>
+    </div>
 
-        st.markdown(f"""
-        <a href="{kakao_login_url}" target="_self">
-            <button style="
-                background-color: #FEE500;
-                color: #000000;
-                font-weight: bold;
-                font-size: 18px;
-                padding: 15px 30px;
-                border: none;
-                border-radius: 12px;
-                cursor: pointer;
-                width: 100%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 10px;
-            ">
-                🟡 카카오톡으로 로그인
-            </button>
-        </a>
-        """, unsafe_allow_html=True)
+    <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.0/kakao.min.js"></script>
+    <script>
+    // 카카오 SDK 초기화
+    if (!Kakao.isInitialized()) {{
+        Kakao.init('{kakao_js_key}');
+    }}
+
+    // 카카오 로그인 버튼 렌더링
+    Kakao.Auth.createLoginButton({{
+        container: '#kakao-login-container',
+        success: function(authObj) {{
+            console.log('로그인 성공:', authObj);
+
+            // 사용자 정보 가져오기
+            Kakao.API.request({{
+                url: '/v2/user/me',
+                success: function(response) {{
+                    console.log('사용자 정보:', response);
+
+                    // Streamlit에 데이터 전달
+                    const userData = {{
+                        kakao_id: response.id,
+                        nickname: response.properties.nickname
+                    }};
+
+                    // 로컬 스토리지에 저장 (임시)
+                    localStorage.setItem('kakao_user', JSON.stringify(userData));
+
+                    // 페이지 새로고침
+                    window.location.reload();
+                }},
+                fail: function(error) {{
+                    console.log('사용자 정보 가져오기 실패:', error);
+                    document.getElementById('login-status').innerHTML = 
+                        '<div style="color: red;">로그인 실패. 다시 시도해주세요.</div>';
+                }}
+            }});
+        }},
+        fail: function(err) {{
+            console.log('로그인 실패:', err);
+            document.getElementById('login-status').innerHTML = 
+                '<div style="color: red;">로그인 실패. 다시 시도해주세요.</div>';
+        }}
+    }});
+    </script>
+    """
+
+    st.components.v1.html(login_html, height=300)
 
     st.stop()
 
