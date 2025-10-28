@@ -47,58 +47,90 @@ def generate_lotto_numbers(exclude=None, count=1):
 def parse_qr_url(url):
     """
     QR 코드 URL 파싱
+    형식: http://m.dhlottery.co.kr/?v=1194s040913182433s041316232427s...
 
     Args:
         url: QR 코드 URL
 
     Returns:
-        dict: {'draw_number': 1234, 'numbers': [[1,2,3,4,5,6], ...]} 또는 None
+        dict: {'draw_number': 1194, 'numbers': [[4,9,13,18,24,33], ...]} 또는 None
     """
     try:
         # URL 파싱
         parsed_url = urlparse(url)
         query_params = parse_qs(parsed_url.query)
 
-        # v 파라미터에서 회차 추출
+        # v 파라미터 확인
         if 'v' not in query_params:
+            print(f"v parameter not found in: {url}")
             return None
 
         v_param = query_params['v'][0]
+        print(f"v parameter: {v_param}")
 
-        # 회차 번호 추출 (숫자로 시작하는 부분)
+        # 회차 번호 추출 (처음 나오는 숫자들)
         draw_match = re.match(r'^(\d+)', v_param)
         if not draw_match:
+            print("Draw number not found")
             return None
 
         draw_number = int(draw_match.group(1))
+        print(f"Draw number: {draw_number}")
 
-        # s로 구분된 번호 추출
+        # 회차 이후 문자열에서 's'로 구분된 번호 추출
         remaining = v_param[len(str(draw_number)):]
-        segments = remaining.split('s')[1:]  # 첫 번째는 빈 문자열
+
+        # 's'로 시작하는지 확인
+        if not remaining.startswith('s'):
+            print(f"Invalid format after draw number: {remaining}")
+            return None
+
+        # 's'로 분리 (첫 번째는 빈 문자열이므로 제외)
+        segments = remaining.split('s')[1:]
+        print(f"Segments: {segments}")
 
         numbers_list = []
 
-        for i, segment in enumerate(segments[:5]):  # 최대 5개 조합
-            # 2자리씩 끊어서 파싱
+        for segment in segments[:5]:  # 최대 5개 조합
+            if not segment:
+                continue
+
+            # 2자리씩 끊어서 번호 추출
             numbers = []
-            for j in range(0, len(segment), 2):
-                if j + 2 <= len(segment):
-                    num = int(segment[j:j+2])
-                    if 1 <= num <= 45:
-                        numbers.append(num)
+            for i in range(0, len(segment), 2):
+                if i + 2 <= len(segment):
+                    num_str = segment[i:i + 2]
+                    try:
+                        num = int(num_str)
+                        if 1 <= num <= 45:
+                            numbers.append(num)
+                    except ValueError:
+                        print(f"Invalid number: {num_str}")
+                        continue
 
-            # 6개 숫자만 추출
-            if len(numbers) >= 6:
-                numbers_list.append(sorted(numbers[:6]))
+            # 정확히 6개 숫자가 있을 때만 추가
+            if len(numbers) == 6:
+                numbers_list.append(sorted(numbers))
+                print(f"Valid combination: {sorted(numbers)}")
+            else:
+                print(f"Invalid combination length: {len(numbers)} numbers in {segment}")
 
-        # dict 형식으로 반환
-        return {
-            'draw_number': draw_number,
-            'numbers': numbers_list
-        }
+        # 최소 1개 이상의 조합이 있어야 성공
+        if draw_number and len(numbers_list) > 0:
+            result = {
+                'draw_number': draw_number,
+                'numbers': numbers_list
+            }
+            print(f"Parse success: {result}")
+            return result
+        else:
+            print(f"Parse failed: draw={draw_number}, combinations={len(numbers_list)}")
+            return None
 
     except Exception as e:
         print(f"QR URL 파싱 오류: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
