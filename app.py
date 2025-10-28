@@ -215,12 +215,12 @@ elif menu == "📱 QR 입력":
         st.info("🎯 QR 코드를 카메라에 비추면 자동으로 인식됩니다!")
 
         qr_scanner_html = """
-        <div style="max-width: 500px; margin: 0 auto;">
-            <div id="qr-reader" style="width: 100%; border-radius: 10px; overflow: hidden;"></div>
+        <div style="max-width: 600px; margin: 0 auto;">
+            <div id="qr-reader" style="width: 100%; border-radius: 10px; overflow: hidden; border: 2px solid #ddd;"></div>
             <div id="qr-result" style="margin-top: 20px; display: none;">
                 <div style="padding: 15px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 5px; color: #155724;">
                     <strong>✅ QR 코드 인식 성공!</strong>
-                    <div id="qr-url" style="margin-top: 10px; word-break: break-all;"></div>
+                    <div id="qr-url" style="margin-top: 10px; word-break: break-all; font-size: 12px;"></div>
                 </div>
             </div>
             <div id="qr-error" style="margin-top: 20px; display: none;">
@@ -228,6 +228,17 @@ elif menu == "📱 QR 입력":
                     <strong>❌ 카메라 접근 불가</strong>
                     <div style="margin-top: 10px;">카메라 권한을 허용해주세요.</div>
                 </div>
+            </div>
+            <div id="qr-instructions" style="margin-top: 15px; padding: 10px; background: #e7f3ff; border-radius: 5px;">
+                <p style="margin: 5px 0; color: #004085; font-size: 14px;">
+                    📌 <strong>사용 팁:</strong>
+                </p>
+                <ul style="margin: 5px 0; padding-left: 20px; color: #004085; font-size: 13px;">
+                    <li>QR 코드를 화면 중앙의 박스 안에 맞추세요</li>
+                    <li>너무 가까이 대지 마세요 (10-20cm 거리)</li>
+                    <li>조명이 밝은 곳에서 시도하세요</li>
+                    <li>QR 코드가 흔들리지 않게 고정하세요</li>
+                </ul>
             </div>
         </div>
 
@@ -238,21 +249,26 @@ elif menu == "📱 QR 입력":
 
         function onScanSuccess(decodedText, decodedResult) {
             if (!isScanning) return;
-            
+
             console.log(`QR Code detected: ${decodedText}`);
-            
+
+            // 결과 표시
             document.getElementById('qr-result').style.display = 'block';
             document.getElementById('qr-url').textContent = decodedText;
-            
+            document.getElementById('qr-instructions').style.display = 'none';
+
+            // Streamlit에 데이터 전달
             window.parent.postMessage({
                 type: 'streamlit:setComponentValue',
                 value: decodedText
             }, '*');
-            
+
+            // 스캔 중지
             if (html5QrCode) {
                 html5QrCode.stop().then(() => {
                     isScanning = false;
-                    document.getElementById('qr-reader').innerHTML = '<div style="padding: 20px; text-align: center; color: #28a745;">✅ QR 코드 인식 완료!</div>';
+                    document.getElementById('qr-reader').innerHTML = 
+                        '<div style="padding: 40px; text-align: center; color: #28a745; font-size: 18px; font-weight: bold;">✅ QR 코드 인식 완료!</div>';
                 }).catch(err => {
                     console.log('Stop scanning error:', err);
                 });
@@ -260,39 +276,91 @@ elif menu == "📱 QR 입력":
         }
 
         function onScanError(errorMessage) {
-            // 스캔 실패는 무시
+            // 스캔 실패는 조용히 무시 (계속 시도)
         }
 
         function startScanner() {
             html5QrCode = new Html5Qrcode("qr-reader");
             isScanning = true;
-            
+
+            // 향상된 설정
             const config = {
-                fps: 10,
-                qrbox: { width: 250, height: 250 },
-                aspectRatio: 1.0
+                fps: 10,  // 프레임 속도
+                qrbox: { width: 300, height: 300 },  // QR 박스 크기 증가
+                aspectRatio: 1.0,
+                disableFlip: false,  // 이미지 플립 허용
+                // 고급 설정
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true  // 브라우저 내장 바코드 감지기 사용
+                }
             };
 
-            html5QrCode.start(
-                { facingMode: "environment" },
-                config,
-                onScanSuccess,
-                onScanError
-            ).catch(err => {
-                console.log('Camera start error:', err);
-                document.getElementById('qr-error').style.display = 'block';
-                
+            // 후면 카메라 우선 시도
+            Html5Qrcode.getCameras().then(cameras => {
+                if (cameras && cameras.length) {
+                    console.log('Available cameras:', cameras.length);
+
+                    // 후면 카메라 찾기
+                    let cameraId = cameras[0].id;
+
+                    // "back" 또는 "rear"가 포함된 카메라 찾기
+                    for (let camera of cameras) {
+                        if (camera.label.toLowerCase().includes('back') || 
+                            camera.label.toLowerCase().includes('rear')) {
+                            cameraId = camera.id;
+                            break;
+                        }
+                    }
+
+                    console.log('Using camera:', cameraId);
+
+                    html5QrCode.start(
+                        cameraId,
+                        config,
+                        onScanSuccess,
+                        onScanError
+                    ).catch(err => {
+                        console.log('Camera start error:', err);
+                        document.getElementById('qr-error').style.display = 'block';
+                    });
+                } else {
+                    // 카메라 없으면 기본 방식
+                    html5QrCode.start(
+                        { facingMode: "environment" },
+                        config,
+                        onScanSuccess,
+                        onScanError
+                    ).catch(err => {
+                        console.log('Camera start error:', err);
+                        document.getElementById('qr-error').style.display = 'block';
+
+                        // 전면 카메라로 재시도
+                        html5QrCode.start(
+                            { facingMode: "user" },
+                            config,
+                            onScanSuccess,
+                            onScanError
+                        ).catch(err2 => {
+                            console.log('Front camera also failed:', err2);
+                        });
+                    });
+                }
+            }).catch(err => {
+                console.log('Get cameras error:', err);
+                // 폴백: facingMode 방식
                 html5QrCode.start(
-                    { facingMode: "user" },
+                    { facingMode: "environment" },
                     config,
                     onScanSuccess,
                     onScanError
-                ).catch(err2 => {
-                    console.log('Front camera also failed:', err2);
+                ).catch(err => {
+                    console.log('Fallback camera start error:', err);
+                    document.getElementById('qr-error').style.display = 'block';
                 });
             });
         }
 
+        // 페이지 로드 시 자동 시작
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', startScanner);
         } else {
