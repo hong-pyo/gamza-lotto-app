@@ -68,7 +68,7 @@ def parse_qr_url(url):
         v_param = query_params['v'][0]
         print(f"v parameter: {v_param}")
 
-        # 회차 번호 추출 (처음 나오는 숫자들)
+        # 회차 번호 추출
         draw_match = re.match(r'^(\d+)', v_param)
         if not draw_match:
             print("Draw number not found")
@@ -80,22 +80,28 @@ def parse_qr_url(url):
         # 회차 이후 문자열에서 's'로 구분된 번호 추출
         remaining = v_param[len(str(draw_number)):]
 
-        # 's'로 시작하는지 확인
         if not remaining.startswith('s'):
             print(f"Invalid format after draw number: {remaining}")
             return None
 
-        # 's'로 분리 (첫 번째는 빈 문자열이므로 제외)
+        # 's'로 분리
         segments = remaining.split('s')[1:]
-        print(f"Segments: {segments}")
+        print(f"Total segments: {len(segments)}")
 
         numbers_list = []
 
-        for segment in segments[:5]:  # 최대 5개 조합
+        for idx, segment in enumerate(segments):
             if not segment:
                 continue
 
-            # 2자리씩 끊어서 번호 추출
+            # 12자리가 넘으면 앞 12자리만 사용
+            if len(segment) > 12:
+                print(f"Segment {idx}: {segment} (length: {len(segment)}) -> 앞 12자리만 사용")
+                segment = segment[:12]
+            else:
+                print(f"Segment {idx}: {segment} (length: {len(segment)})")
+
+            # 12자리 세그먼트 파싱
             numbers = []
             for i in range(0, len(segment), 2):
                 if i + 2 <= len(segment):
@@ -104,27 +110,29 @@ def parse_qr_url(url):
                         num = int(num_str)
                         if 1 <= num <= 45:
                             numbers.append(num)
+                        else:
+                            print(f"  Out of range: {num}")
                     except ValueError:
-                        print(f"Invalid number: {num_str}")
-                        continue
+                        print(f"  Invalid number: {num_str}")
 
-            # 정확히 6개 숫자가 있을 때만 추가
+            # 정확히 6개 숫자일 때만 추가
             if len(numbers) == 6:
                 numbers_list.append(sorted(numbers))
-                print(f"Valid combination: {sorted(numbers)}")
+                print(f"  ✅ Valid combination: {sorted(numbers)}")
             else:
-                print(f"Invalid combination length: {len(numbers)} numbers in {segment}")
+                print(f"  ❌ Invalid: only {len(numbers)} numbers")
 
-        # 최소 1개 이상의 조합이 있어야 성공
+        print(f"\nTotal valid combinations: {len(numbers_list)}")
+
         if draw_number and len(numbers_list) > 0:
             result = {
                 'draw_number': draw_number,
                 'numbers': numbers_list
             }
-            print(f"Parse success: {result}")
+            print(f"✅ Parse success: {len(numbers_list)} combinations")
             return result
         else:
-            print(f"Parse failed: draw={draw_number}, combinations={len(numbers_list)}")
+            print(f"❌ Parse failed: draw={draw_number}, combinations={len(numbers_list)}")
             return None
 
     except Exception as e:
